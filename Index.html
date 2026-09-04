@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Porsche | Sales Intelligence Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --black:#050505; --black2:#0b0b0d; --panel:rgba(20,20,22,.82);
+  --line:#2a2a2d; --white:#f5f5f5; --muted:#a7a7aa;
+  --red:#d5001c; --red2:#ff1834; --silver:#d8d8d8;
+}
+* { box-sizing:border-box; }
+body {
+  margin:0; color:var(--white); font-family:Inter,Arial,Helvetica,sans-serif;
+  background:
+    radial-gradient(circle at 80% 10%, rgba(213,0,28,.22), transparent 30%),
+    radial-gradient(circle at 10% 80%, rgba(255,255,255,.07), transparent 28%),
+    linear-gradient(135deg,#030303 0%,#111114 45%,#050505 100%);
+  min-height:100vh; overflow-x:hidden;
+}
+body:before {
+  content:""; position:fixed; inset:0; pointer-events:none; opacity:.11;
+  background-image:linear-gradient(115deg,transparent 0 48%,rgba(255,255,255,.2) 49%,transparent 50%);
+  background-size:180px 180px; mix-blend-mode:screen;
+}
+header {
+  position:sticky; top:0; z-index:10; backdrop-filter:blur(18px);
+  background:rgba(4,4,5,.88); border-bottom:1px solid #262629;
+}
+.top {
+  display:flex; align-items:center; justify-content:space-between; gap:24px;
+  padding:18px 28px 14px; max-width:1600px; margin:auto;
+}
+.brand { letter-spacing:.24em; font-weight:700; font-size:20px; }
+.brand span { color:var(--red); }
+.subtitle { color:var(--muted); font-size:11px; letter-spacing:.16em; text-transform:uppercase; }
+.filters {
+  max-width:1600px; margin:auto; padding:0 28px 18px;
+  display:grid; grid-template-columns:repeat(4,minmax(150px,1fr)) auto; gap:10px;
+}
+select,input {
+  width:100%; padding:11px 12px; border-radius:4px; border:1px solid #343438;
+  background:#111114; color:var(--white); outline:none;
+}
+button {
+  border:0; border-radius:4px; padding:11px 16px; background:var(--red);
+  color:white; font-weight:700; cursor:pointer;
+}
+button:hover { background:var(--red2); }
+main { max-width:1600px; margin:auto; padding:24px 28px 50px; }
+.kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:16px; }
+.card {
+  background:var(--panel); border:1px solid var(--line); border-radius:8px;
+  box-shadow:0 18px 50px rgba(0,0,0,.28);
+}
+.kpi { padding:18px 20px; position:relative; overflow:hidden; }
+.kpi:after { content:""; position:absolute; right:-30px; top:-35px; width:100px; height:100px; border-radius:50%; background:rgba(213,0,28,.08); }
+.label { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.13em; }
+.value { font-size:29px; font-weight:750; margin-top:9px; letter-spacing:-.02em; }
+.delta { color:#bbb; font-size:11px; margin-top:6px; }
+.grid { display:grid; grid-template-columns:1.25fr .75fr; gap:16px; margin-top:16px; }
+.panel { padding:18px; min-height:340px; }
+.panel h3 { margin:0 0 4px; font-size:14px; letter-spacing:.04em; }
+.panel p { margin:0 0 16px; color:var(--muted); font-size:11px; }
+.chart-wrap { position:relative; height:300px; }
+.wide { grid-column:1/-1; }
+.heat {
+  display:grid; gap:3px; overflow:auto; max-height:480px; padding-top:8px;
+}
+.heat-row { display:grid; grid-template-columns:150px repeat(var(--cols),minmax(42px,1fr)); gap:3px; min-width:800px; }
+.heat-cell { height:27px; display:flex; align-items:center; justify-content:center; border-radius:2px; font-size:9px; }
+.heat-head { background:#161619; color:#aaa; font-size:9px; }
+.model-label { justify-content:flex-start; padding-left:7px; background:#151518; color:#ddd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.legend { display:flex; align-items:center; gap:8px; color:#999; font-size:10px; margin-top:10px; }
+.legend i { width:12px; height:12px; border-radius:2px; display:inline-block; background:linear-gradient(90deg,#19191b,#d5001c); }
+.footer { color:#777; font-size:10px; margin-top:18px; line-height:1.5; }
+@media(max-width:1000px) {
+ .filters{grid-template-columns:repeat(2,1fr)} .kpis{grid-template-columns:repeat(2,1fr)}
+ .grid{grid-template-columns:1fr}
+}
+@media(max-width:600px) {
+ .filters{grid-template-columns:1fr} .kpis{grid-template-columns:1fr}
+ main,.top,.filters{padding-left:14px;padding-right:14px}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <div>
+      <div class="brand">PORSCHE <span>///</span></div>
+      <div class="subtitle">Sales intelligence · performance dashboard</div>
+    </div>
+    <div class="subtitle" id="selectionText">Visão consolidada</div>
+  </div>
+  <div class="filters">
+    <select id="estado"><option value="">Estado</option></select>
+    <select id="cidade"><option value="">Cidade</option></select>
+    <select id="modelo"><option value="">Modelo</option></select>
+    <input id="inicio" type="date" title="Data inicial">
+    <button id="reset">Limpar filtros</button>
+  </div>
+  <div style="max-width:1600px;margin:auto;padding:0 28px 16px;display:flex;gap:10px;align-items:center">
+    <input id="fim" type="date" title="Data final" style="max-width:180px">
+    <span class="subtitle">Período: data inicial → data final</span>
+  </div>
+</header>
+
+<main>
+  <section class="kpis">
+    <div class="card kpi"><div class="label">Faturamento total</div><div class="value" id="kpiRevenue">R$ 0</div><div class="delta" id="kpiRevenueSub"></div></div>
+    <div class="card kpi"><div class="label">Unidades vendidas</div><div class="value" id="kpiUnits">0</div><div class="delta" id="kpiUnitsSub"></div></div>
+    <div class="card kpi"><div class="label">Ticket médio</div><div class="value" id="kpiTicket">R$ 0</div><div class="delta">faturamento ÷ unidades</div></div>
+    <div class="card kpi"><div class="label">Taxa de entrega</div><div class="value" id="kpiDelivery">0%</div><div class="delta" id="kpiDeliverySub"></div></div>
+  </section>
+
+  <section class="grid">
+    <div class="card panel">
+      <h3>Faturamento por modelo</h3>
+      <p>Ranking dos modelos no recorte selecionado.</p>
+      <div class="chart-wrap"><canvas id="modelChart"></canvas></div>
+    </div>
+    <div class="card panel">
+      <h3>Mix de modelos</h3>
+      <p>Participação das unidades vendidas por modelo.</p>
+      <div class="chart-wrap"><canvas id="mixChart"></canvas></div>
+    </div>
+
+    <div class="card panel wide">
+      <h3>Evolução de vendas por período</h3>
+      <p>Unidades e faturamento por mês, considerando somente registros com data válida.</p>
+      <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+    </div>
+
+    <div class="card panel wide">
+      <h3>Top cidades por faturamento</h3>
+      <p>Ranking das cidades com maior contribuição para o faturamento no recorte selecionado.</p>
+      <div class="chart-wrap"><canvas id="cityChart"></canvas></div>
+    </div>
+
+    <div class="card panel">
+      <h3>Faturamento por estado</h3>
+      <p>Distribuição geográfica do faturamento.</p>
+      <div class="chart-wrap"><canvas id="stateChart"></canvas></div>
+    </div>
+    <div class="card panel">
+      <h3>Status das vendas</h3>
+      <p>Visão operacional dos registros selecionados.</p>
+      <div class="chart-wrap"><canvas id="statusChart"></canvas></div>
+    </div>
+  </section>
+
+  <div class="footer">
+    Fonte: Base_Porshe.xlsx. Datas marcadas como INVALID não entram nas séries temporais.
+    O faturamento operacional considera registros não cancelados; os filtros preservam os demais registros para análise de status.
+    A linguagem visual foi inspirada na apresentação oficial da Porsche Brasil, com predominância de preto, branco, cinzas e acento vermelho. 
+    <a href="https://www.porsche.com/brazil/pt/" target="_blank" style="color:#aaa">Porsche Brasil</a>.
+  </div>
+</main>
+
+<script>
+const RAW = [{"id": 6, "data": null, "modelo": "718 Cayman", "estado": "MA", "cidade": "Boston", "faturamento": 79500.0, "status": "Delivered", "pagamento": "Credit Card"}, {"id": 7, "data": "2024-03-14", "modelo": "911 Turbo S", "estado": "WA", "cidade": "Seattle", "faturamento": 235000.0, "status": "Delivered", "pagamento": "Wire Transfer"}, {"id": 8, "data": "2024-04-18", "modelo": "Cayenne Coupe", "estado": "TX", "cidade": "Austin", "faturamento": 112750.0, "status": "In Transit", "pagamento": "Financing"}, {"id": 9, "data": null, "modelo": "Macan S", "estado": "CO", "cidade": "Denver", "faturamento": 68900.0, "status": "Pending", "pagamento": "Cash"}, {"id": 10, "data": "2024-05-22", "modelo": "Taycan 4S", "estado": "CA", "cidade": "Los Angeles", "faturamento": 121000.0, "status": "Delivered", "pagamento": "Bank Transfer"}, {"id": 11, "data": "2024-08-06", "modelo": "Panamera 4", "estado": "FL", "cidade": "Miami", "faturamento": 104500.0, "status": "Cancelled", "pagamento": "Credit Card"}, {"id": 12, "data": "2024-07-11", "modelo": "911 Carrera S", "estado": "NY", "cidade": "New York", "faturamento": 96300.0, "status": "Delivered", "pagamento": "Lease"}, {"id": 13, "data": null, "modelo": "Cayenne E-Hybrid", "estado": "CA", "cidade": "San Diego", "faturamento": 89750.0, "status": "Pending Approval", "pagamento": "Wire Transfer"}, {"id": 14, "data": "2024-08-19", "modelo": "718 Boxster", "estado": "IL", "cidade": "Chicago", "faturamento": 73500.0, "status": "Shipped", "pagamento": "Debit Card"}, {"id": 15, "data": "2024-09-02", "modelo": "Macan GTS", "estado": "AZ", "cidade": "Phoenix", "faturamento": 95000.0, "status": "In Transit", "pagamento": "Financing"}, {"id": 16, "data": "2024-09-17", "modelo": "Taycan Turbo", "estado": "TX", "cidade": "Dallas", "faturamento": 153200.5, "status": "Delivered", "pagamento": "ACH Payment"}, {"id": 17, "data": null, "modelo": "911 GT3", "estado": "NV", "cidade": "Las Vegas", "faturamento": 241000.0, "status": "Pending", "pagamento": "Wire Transfer"}, {"id": 18, "data": "2024-05-11", "modelo": "Panamera Turbo S", "estado": "CA", "cidade": "San Jose", "faturamento": 132000.0, "status": "Delivered", "pagamento": "Cash"}, {"id": 19, "data": "2024-12-12", "modelo": "Cayenne Turbo GT", "estado": "TX", "cidade": "Houston", "faturamento": 188000.0, "status": "Awaiting Delivery", "pagamento": "Crypto Payment"}, {"id": 20, "data": "2024-12-25", "modelo": "911 Carrera Cabriolet", "estado": "GA", "cidade": "Atlanta", "faturamento": 127800.0, "status": "Delivered", "pagamento": "Credit Card"}, {"id": 21, "data": "2025-01-06", "modelo": "Macan", "estado": "FL", "cidade": "Orlando", "faturamento": 58900.0, "status": "Pending", "pagamento": "Bank Transfer"}, {"id": 22, "data": null, "modelo": "718 Spyder RS", "estado": "OR", "cidade": "Portland", "faturamento": 164000.0, "status": "In Transit", "pagamento": "Financing"}, {"id": 23, "data": "2025-02-14", "modelo": "Taycan Cross Turismo", "estado": "NC", "cidade": "Charlotte", "faturamento": 118500.0, "status": "Delivered", "pagamento": "Wire Transfer"}, {"id": 24, "data": null, "modelo": "Cayenne S", "estado": "TN", "cidade": "Nashville", "faturamento": 91300.0, "status": "Pending", "pagamento": "Credit Card"}, {"id": 25, "data": "2025-03-21", "modelo": "911 Targa 4S", "estado": "MN", "cidade": "Minneapolis", "faturamento": 158750.0, "status": "Delivered", "pagamento": "Lease"}, {"id": 26, "data": "2025-03-28", "modelo": "Panamera", "estado": "PA", "cidade": "Philadelphia", "faturamento": 72000.0, "status": "Cancelled", "pagamento": "Bank Transfer"}, {"id": 27, "data": "2025-04-09", "modelo": "Macan Electric", "estado": "TX", "cidade": "San Antonio", "faturamento": 86500.0, "status": "Delivered", "pagamento": "Wire Transfer"}, {"id": 28, "data": null, "modelo": "911 Dakar", "estado": "UT", "cidade": "Salt Lake City", "faturamento": 270000.0, "status": "Awaiting Pickup", "pagamento": "Cash"}, {"id": 29, "data": "2025-05-12", "modelo": "Taycan GTS", "estado": "NC", "cidade": "Raleigh", "faturamento": 139000.0, "status": "In Transit", "pagamento": "Financing"}, {"id": 30, "data": "2025-06-18", "modelo": "Cayenne", "estado": "MI", "cidade": "Detroit", "faturamento": 76800.0, "status": "Delivered", "pagamento": "Credit Card"}, {"id": 31, "data": null, "modelo": "718 Cayman GT4 RS", "estado": "OH", "cidade": "Columbus", "faturamento": 173600.0, "status": "Pending", "pagamento": "Wire Transfer"}, {"id": 32, "data": "2025-07-07", "modelo": "911 Carrera GTS", "estado": "IN", "cidade": "Indianapolis", "faturamento": 119900.0, "status": "Delivered", "pagamento": "Cash"}, {"id": 33, "data": "2025-07-22", "modelo": "Panamera 4 E-Hybrid", "estado": "TX", "cidade": "Fort Worth", "faturamento": 109250.0, "status": "In Transit", "pagamento": "Lease"}, {"id": 34, "data": "2025-08-14", "modelo": "Macan T", "estado": "FL", "cidade": "Jacksonville", "faturamento": 82000.0, "status": "Delivered", "pagamento": "Wire Transfer"}, {"id": 35, "data": "2025-09-01", "modelo": "Taycan Turbo S", "estado": "CA", "cidade": "San Diego", "faturamento": 214000.0, "status": "Pending Review", "pagamento": "Crypto Payment"}, {"id": 36, "data": null, "modelo": "911 Carrera", "estado": "FL", "cidade": "Tampa", "faturamento": 124500.0, "status": "Delivered", "pagamento": "Credit Card"}, {"id": 37, "data": "2025-09-18", "modelo": "Cayenne S", "estado": "CA", "cidade": "Sacramento", "faturamento": 98200.0, "status": "Pending", "pagamento": "Bank Transfer"}, {"id": 38, "data": "2025-10-04", "modelo": "Macan", "estado": "OH", "cidade": "Cleveland", "faturamento": 67500.0, "status": "Delivered", "pagamento": "Financing"}, {"id": 39, "data": "2025-10-12", "modelo": "Taycan", "estado": "WI", "cidade": "Milwaukee", "faturamento": 116900.0, "status": "In Transit", "pagamento": "Wire Transfer"}, {"id": 40, "data": "2025-10-29", "modelo": "Panamera 4S", "estado": "MO", "cidade": "Kansas City", "faturamento": 112000.0, "status": "Delivered", "pagamento": "Cash"}, {"id": 41, "data": "2025-02-11", "modelo": "718 Boxster", "estado": "NE", "cidade": "Omaha", "faturamento": 74000.0, "status": "Cancelled", "pagamento": "Debit Card"}, {"id": 42, "data": "2025-11-16", "modelo": "911 Turbo", "estado": "NM", "cidade": "Albuquerque", "faturamento": 198300.0, "status": "Awaiting Delivery", "pagamento": "Wire Transfer"}, {"id": 43, "data": null, "modelo": "Cayenne Coupe", "estado": "AZ", "cidade": "Tucson", "faturamento": 103750.0, "status": "Pending Approval", "pagamento": "Wire Transfer"}, {"id": 44, "data": null, "modelo": "Macan GTS", "estado": "CA", "cidade": "Fresno", "faturamento": 93600.0, "status": "Shipped", "pagamento": "Financing"}, {"id": 45, "data": "2025-12-07", "modelo": "Taycan 4S", "estado": "VA", "cidade": "Virginia Beach", "faturamento": 129000.0, "status": "In Transit", "pagamento": "ACH Payment"}, {"id": 46, "data": "2025-12-22", "modelo": "Panamera Turbo", "estado": "CO", "cidade": "Colorado Springs", "faturamento": 136000.0, "status": "Delivered", "pagamento": "Credit Card"}, {"id": 47, "data": null, "modelo": "911 GT3 RS", "estado": "TX", "cidade": "Arlington", "faturamento": 286500.0, "status": "Pending", "pagamento": "Wire Transfer"}, {"id": 48, "data": "2026-01-08", "modelo": "Cayenne E-Hybrid", "estado": "CA", "cidade": "Bakersfield", "faturamento": 92800.0, "status": "Delivered", "pagamento": "Lease"}, {"id": 49, "data": "2026-01-15", "modelo": "Macan T", "estado": "AZ", "cidade": "Mesa", "faturamento": 72400.0, "status": "Awaiting Pickup", "pagamento": "Cash"}, {"id": 50, "data": "2026-01-28", "modelo": "Taycan Turbo", "estado": "GA", "cidade": "Atlanta", "faturamento": 158500.0, "status": "Delivered", "pagamento": "Crypto Payment"}, {"id": 51, "data": "2026-02-03", "modelo": "718 Cayman", "estado": "CA", "cidade": "Long Beach", "faturamento": 69900.0, "status": "Pending", "pagamento": "Bank Transfer"}, {"id": 52, "data": null, "modelo": "911 Targa 4", "estado": "CA", "cidade": "Oakland", "faturamento": 141250.0, "status": "In Transit", "pagamento": "Financing"}, {"id": 53, "data": "2026-02-19", "modelo": "Panamera", "estado": "OK", "cidade": "Tulsa", "faturamento": 71500.0, "status": "Delivered", "pagamento": "Wire Transfer"}, {"id": 54, "data": "2026-02-25", "modelo": "Cayenne Turbo", "estado": "KS", "cidade": "Wichita", "faturamento": 146800.0, "status": "Pending", "pagamento": "Credit Card"}, {"id": 55, "data": "2026-03-01", "modelo": "Macan Electric", "estado": "LA", "cidade": "New Orleans", "faturamento": 89700.0, "status": "Delivered", "pagamento": "Lease"}, {"id": 56, "data": "2026-03-14", "modelo": "911 Carrera S", "estado": "HI", "cidade": "Honolulu", "faturamento": 104600.0, "status": "Cancelled", "pagamento": "Bank Transfer"}, {"id": 57, "data": null, "modelo": "Taycan GTS", "estado": "CA", "cidade": "Anaheim", "faturamento": 142000.0, "status": "Delivered", "pagamento": "Wire Transfer"}, {"id": 58, "data": "2026-04-08", "modelo": "Cayenne", "estado": "NV", "cidade": "Henderson", "faturamento": 78400.0, "status": "Awaiting Review", "pagamento": "Cash"}, {"id": 59, "data": null, "modelo": "718 Spyder RS", "estado": "KY", "cidade": "Lexington", "faturamento": 169000.0, "status": "In Transit", "pagamento": "Financing"}, {"id": 60, "data": "2026-04-21", "modelo": "911 Dakar", "estado": "CA", "cidade": "Riverside", "faturamento": 268900.0, "status": "Delivered", "pagamento": "Credit Card"}, {"id": 61, "data": "2026-04-29", "modelo": "Panamera 4", "estado": "TX", "cidade": "Corpus Christi", "faturamento": 101300.0, "status": "Pending", "pagamento": "Wire Transfer"}, {"id": 62, "data": "2026-05-05", "modelo": "Macan S", "estado": "MO", "cidade": "St. Louis", "faturamento": 66750.0, "status": "Delivered", "pagamento": "Cash"}, {"id": 63, "data": "2026-05-14", "modelo": "Taycan Cross Turismo", "estado": "PA", "cidade": "Pittsburgh", "faturamento": 127900.0, "status": "In Transit", "pagamento": "Lease"}, {"id": 64, "data": "2026-05-23", "modelo": "Cayenne Turbo GT", "estado": "OH", "cidade": "Cincinnati", "faturamento": 200000.0, "status": "Delivered", "pagamento": "Wire Transfer"}, {"id": 65, "data": "2026-06-02", "modelo": "911 Carrera Cabriolet", "estado": "AK", "cidade": "Anchorage", "faturamento": 132000.0, "status": "Pending Review", "pagamento": "Crypto Payment"}, {"id": 66, "data": "2026-06-15", "modelo": "718 Cayman GT4 RS", "estado": "TX", "cidade": "Plano", "faturamento": 176400.0, "status": "Delivered", "pagamento": "Credit Card"}, {"id": 67, "data": null, "modelo": "Panamera 4 E-Hybrid", "estado": "NJ", "cidade": "Newark", "faturamento": 108500.0, "status": "Cancelled", "pagamento": "Bank Transfer"}, {"id": 68, "data": "2026-07-07", "modelo": "Macan", "estado": "NC", "cidade": "Greensboro", "faturamento": 59000.0, "status": "Awaiting Delivery", "pagamento": "Financing"}, {"id": 69, "data": "2026-07-20", "modelo": "Taycan Turbo S", "estado": "NE", "cidade": "Lincoln", "faturamento": 218000.0, "status": "Pending", "pagamento": "Wire Transfer"}, {"id": 70, "data": null, "modelo": "Cayenne S", "estado": "NJ", "cidade": "Jersey City", "faturamento": 99950.0, "status": "Delivered", "pagamento": "Debit Card"}, {"id": 71, "data": "2026-04-08", "modelo": "911 Carrera GTS", "estado": "AZ", "cidade": "Chandler", "faturamento": 121750.0, "status": "Delivered", "pagamento": "Credit Card"}, {"id": 72, "data": "2026-08-18", "modelo": "718 Boxster GTS", "estado": "NV", "cidade": "Reno", "faturamento": 91500.0, "status": "Shipped", "pagamento": "Lease"}, {"id": 73, "data": "2026-08-31", "modelo": "Panamera Turbo S", "estado": "NY", "cidade": "Buffalo", "faturamento": 134000.0, "status": "In Transit", "pagamento": "Wire Transfer"}, {"id": 74, "data": "2026-09-09", "modelo": "Macan GTS", "estado": "NC", "cidade": "Durham", "faturamento": 96800.0, "status": "Delivered", "pagamento": "ACH Payment"}, {"id": 75, "data": "2026-09-17", "modelo": "Taycan 4S", "estado": "TX", "cidade": "Laredo", "faturamento": 131600.0, "status": "Pending Approval", "pagamento": "Wire Transfer"}, {"id": 76, "data": "2026-09-28", "modelo": "Cayenne E-Hybrid", "estado": "WI", "cidade": "Madison", "faturamento": 94300.0, "status": "Delivered", "pagamento": "Cash"}, {"id": 77, "data": "2026-10-06", "modelo": "911 Turbo S", "estado": "TX", "cidade": "Lubbock", "faturamento": 242000.0, "status": "Awaiting Pickup", "pagamento": "Crypto Payment"}, {"id": 78, "data": "2026-10-16", "modelo": "718 Cayman S", "estado": "OH", "cidade": "Toledo", "faturamento": 82750.0, "status": "Cancelled", "pagamento": "Credit Card"}, {"id": 79, "data": "2026-10-29", "modelo": "Macan Electric", "estado": "CA", "cidade": "Irvine", "faturamento": 91300.0, "status": "Delivered", "pagamento": "Wire Transfer"}, {"id": 80, "data": "2026-11-03", "modelo": "Panamera", "estado": "TX", "cidade": "Garland", "faturamento": 79900.0, "status": "Pending", "pagamento": "Financing"}, {"id": 81, "data": null, "modelo": "Cayenne Coupe", "estado": "TX", "cidade": "Irving", "faturamento": 111000.0, "status": "In Transit", "pagamento": "Bank Transfer"}, {"id": 82, "data": "2026-12-11", "modelo": "911 Targa 4S", "estado": "VA", "cidade": "Chesapeake", "faturamento": 156500.0, "status": "Delivered", "pagamento": "Cash"}, {"id": 83, "data": "2026-12-24", "modelo": "Taycan", "estado": "AZ", "cidade": "Scottsdale", "faturamento": 119900.0, "status": "Pending", "pagamento": "Lease"}, {"id": 84, "data": null, "modelo": "Macan T", "estado": "VA", "cidade": "Norfolk", "faturamento": 73200.0, "status": "Delivered", "pagamento": "Wire Transfer"}, {"id": 85, "data": "2026-12-28", "modelo": "911 GT3", "estado": "ID", "cidade": "Boise", "faturamento": 224000.0, "status": "Awaiting Delivery", "pagamento": "Wire Transfer"}, {"id": 86, "data": "2027-01-15", "modelo": "911 Carrera", "estado": "FL", "cidade": "Orlando", "faturamento": 126900.0, "status": "Delivered", "pagamento": "Credit Card"}, {"id": 87, "data": "2027-01-29", "modelo": "Cayenne", "estado": "CA", "cidade": "San Jose", "faturamento": 84500.0, "status": "Pending", "pagamento": "Bank Transfer"}, {"id": 88, "data": "2027-02-11", "modelo": "Macan S", "estado": "FL", "cidade": "Tampa", "faturamento": 69800.0, "status": "Delivered", "pagamento": "Financing"}, {"id": 89, "data": null, "modelo": "Taycan 4S", "estado": "CO", "cidade": "Denver", "faturamento": 132700.0, "status": "In Transit", "pagamento": "Wire Transfer"}, {"id": 90, "data": "2027-03-05", "modelo": "Panamera", "estado": "TX", "cidade": "Austin", "faturamento": 81000.0, "status": "Delivered", "pagamento": "Cash"}, {"id": 91, "data": "2027-03-18", "modelo": "718 Cayman", "estado": "WA", "cidade": "Seattle", "faturamento": 78900.0, "status": "Cancelled", "pagamento": "Debit Card"}, {"id": 92, "data": "2027-04-02", "modelo": "911 Turbo S", "estado": "MA", "cidade": "Boston", "faturamento": 249300.0, "status": "Awaiting Delivery", "pagamento": "Wire Transfer"}, {"id": 93, "data": null, "modelo": "Cayenne Coupe", "estado": "AZ", "cidade": "Phoenix", "faturamento": 108750.0, "status": "Pending Approval", "pagamento": "Wire Transfer"}, {"id": 94, "data": null, "modelo": "Macan Electric", "estado": "IL", "cidade": "Chicago", "faturamento": 92600.0, "status": "Shipped", "pagamento": "Financing"}, {"id": 95, "data": "2027-05-12", "modelo": "Taycan Turbo", "estado": "TX", "cidade": "Dallas", "faturamento": 164000.0, "status": "In Transit", "pagamento": "ACH Payment"}, {"id": 96, "data": "2027-05-27", "modelo": "Panamera 4S", "estado": "CA", "cidade": "San Francisco", "faturamento": 119000.0, "status": "Delivered", "pagamento": "Credit Card"}, {"id": 97, "data": null, "modelo": "911 GT3", "estado": "NV", "cidade": "Las Vegas", "faturamento": 232500.0, "status": "Pending", "pagamento": "Wire Transfer"}, {"id": 98, "data": "2027-06-18", "modelo": "Cayenne E-Hybrid", "estado": "NC", "cidade": "Charlotte", "faturamento": 96800.0, "status": "Delivered", "pagamento": "Lease"}, {"id": 99, "data": "2027-07-03", "modelo": "Macan T", "estado": "AZ", "cidade": "Mesa", "faturamento": 74400.0, "status": "Awaiting Pickup", "pagamento": "Cash"}, {"id": 100, "data": "2027-07-22", "modelo": "Taycan GTS", "estado": "GA", "cidade": "Atlanta", "faturamento": 148500.0, "status": "Delivered", "pagamento": "Crypto Payment"}, {"id": 101, "data": "2027-08-08", "modelo": "718 Boxster", "estado": "CA", "cidade": "Long Beach", "faturamento": 71900.0, "status": "Pending", "pagamento": "Bank Transfer"}, {"id": 102, "data": null, "modelo": "911 Targa 4", "estado": "CA", "cidade": "Oakland", "faturamento": 143250.0, "status": "In Transit", "pagamento": "Financing"}, {"id": 103, "data": "2027-09-19", "modelo": "Panamera Turbo", "estado": "OK", "cidade": "Tulsa", "faturamento": 137500.0, "status": "Delivered", "pagamento": "Wire Transfer"}, {"id": 104, "data": "2027-09-25", "modelo": "Cayenne Turbo GT", "estado": "KS", "cidade": "Wichita", "faturamento": 204800.0, "status": "Pending", "pagamento": "Credit Card"}, {"id": 105, "data": "2027-10-01", "modelo": "911 Dakar", "estado": "LA", "cidade": "New Orleans", "faturamento": 271700.0, "status": "Delivered", "pagamento": "Lease"}];
+const COLORS = ["#d5001c","#8f8f93","#f2f2f2","#66666b","#bcbcc0","#3f3f43","#e20d28","#77777b","#cfcfd2","#55555a"];
+let charts = {};
+
+const fmtBRL = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}).format(v||0);
+const fmtInt = v => new Intl.NumberFormat('pt-BR').format(v||0);
+
+function fillSelect(id, values) {
+  const el=document.getElementById(id);
+  values.forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; el.appendChild(o); });
+}
+fillSelect('estado',["AK", "AZ", "CA", "CO", "FL", "GA", "HI", "ID", "IL", "IN", "KS", "KY", "LA", "MA", "MI", "MN", "MO", "NC", "NE", "NJ", "NM", "NV", "NY", "OH", "OK", "OR", "PA", "TN", "TX", "UT", "VA", "WA", "WI"]);
+fillSelect('cidade',["Albuquerque", "Anaheim", "Anchorage", "Arlington", "Atlanta", "Austin", "Bakersfield", "Boise", "Boston", "Buffalo", "Chandler", "Charlotte", "Chesapeake", "Chicago", "Cincinnati", "Cleveland", "Colorado Springs", "Columbus", "Corpus Christi", "Dallas", "Denver", "Detroit", "Durham", "Fort Worth", "Fresno", "Garland", "Greensboro", "Henderson", "Honolulu", "Houston", "Indianapolis", "Irvine", "Irving", "Jacksonville", "Jersey City", "Kansas City", "Laredo", "Las Vegas", "Lexington", "Lincoln", "Long Beach", "Los Angeles", "Lubbock", "Madison", "Mesa", "Miami", "Milwaukee", "Minneapolis", "Nashville", "New Orleans", "New York", "Newark", "Norfolk", "Oakland", "Omaha", "Orlando", "Philadelphia", "Phoenix", "Pittsburgh", "Plano", "Portland", "Raleigh", "Reno", "Riverside", "Sacramento", "Salt Lake City", "San Antonio", "San Diego", "San Francisco", "San Jose", "Scottsdale", "Seattle", "St. Louis", "Tampa", "Toledo", "Tucson", "Tulsa", "Virginia Beach", "Wichita"]);
+fillSelect('modelo',["718 Boxster", "718 Boxster GTS", "718 Cayman", "718 Cayman GT4 RS", "718 Cayman S", "718 Spyder RS", "911 Carrera", "911 Carrera Cabriolet", "911 Carrera GTS", "911 Carrera S", "911 Dakar", "911 GT3", "911 GT3 RS", "911 Targa 4", "911 Targa 4S", "911 Turbo", "911 Turbo S", "Cayenne", "Cayenne Coupe", "Cayenne E-Hybrid", "Cayenne S", "Cayenne Turbo", "Cayenne Turbo GT", "Macan", "Macan Electric", "Macan GTS", "Macan S", "Macan T", "Panamera", "Panamera 4", "Panamera 4 E-Hybrid", "Panamera 4S", "Panamera Turbo", "Panamera Turbo S", "Taycan", "Taycan 4S", "Taycan Cross Turismo", "Taycan GTS", "Taycan Turbo", "Taycan Turbo S"]);
+
+function filtered() {
+  const estado=document.getElementById('estado').value;
+  const cidade=document.getElementById('cidade').value;
+  const modelo=document.getElementById('modelo').value;
+  const inicio=document.getElementById('inicio').value;
+  const fim=document.getElementById('fim').value;
+  return RAW.filter(r=>{
+    if(estado && r.estado!==estado) return false;
+    if(cidade && r.cidade!==cidade) return false;
+    if(modelo && r.modelo!==modelo) return false;
+    if((inicio||fim) && !r.data) return false;
+    if(inicio && r.data<inicio) return false;
+    if(fim && r.data>fim) return false;
+    return true;
+  });
+}
+
+function operational(rows) {
+  return rows.filter(r=>r.status!=="Cancelled");
+}
+
+function destroy(id) { if(charts[id]) charts[id].destroy(); }
+
+function makeChart(id,type,data,options) {
+  destroy(id);
+  charts[id]=new Chart(document.getElementById(id),{type,data,options});
+}
+
+function baseOptions() {
+  return {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{labels:{color:'#bbb',font:{size:10}}}},
+    scales:{x:{ticks:{color:'#888',font:{size:9}},grid:{color:'#222'}},
+             y:{ticks:{color:'#888',font:{size:9}},grid:{color:'#222'}}}
+  };
+}
+
+function render() {
+  const all=filtered(), rows=operational(all);
+  const revenue=rows.reduce((s,r)=>s+r.faturamento,0);
+  const units=rows.length, ticket=units?revenue/units:0;
+  const delivered=rows.filter(r=>r.status==="Delivered").length;
+  document.getElementById('kpiRevenue').textContent=fmtBRL(revenue);
+  document.getElementById('kpiUnits').textContent=fmtInt(units);
+  document.getElementById('kpiTicket').textContent=fmtBRL(ticket);
+  document.getElementById('kpiDelivery').textContent=(units?100*delivered/units:0).toFixed(1)+'%';
+  document.getElementById('kpiRevenueSub').textContent=rows.length+' registros não cancelados';
+  document.getElementById('kpiUnitsSub').textContent=all.length+' registros no recorte';
+  document.getElementById('kpiDeliverySub').textContent=delivered+' entregues';
+
+  const labels=[...new Set(rows.map(r=>r.modelo))];
+  const byModel=labels.map(m=>({m, v:rows.filter(r=>r.modelo===m).reduce((s,r)=>s+r.faturamento,0)})).sort((a,b)=>b.v-a.v);
+  makeChart('modelChart','bar',
+    {labels:byModel.map(x=>x.m),datasets:[{label:'Faturamento',data:byModel.map(x=>x.v),backgroundColor:'#d5001c',borderRadius:3}]},
+    {...baseOptions(),indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmtBRL(c.raw)}}},
+      scales:{x:{ticks:{color:'#888',callback:v=>fmtBRL(v)},grid:{color:'#222'}},y:{ticks:{color:'#bbb',font:{size:9}},grid:{display:false}}}}
+  );
+
+  const mix=byModel.slice(0,8);
+  makeChart('mixChart','doughnut',
+    {labels:mix.map(x=>x.m),datasets:[{data:mix.map(x=>rows.filter(r=>r.modelo===x.m).length),backgroundColor:COLORS,borderColor:'#151518',borderWidth:2}]},
+    {responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#bbb',font:{size:9}}}}}
+  );
+
+  const months={ };
+  rows.forEach(r=>{if(r.data){const k=r.data.slice(0,7); if(!months[k]) months[k]={q:0,v:0}; months[k].q++; months[k].v+=r.faturamento;}});
+  const mk=Object.keys(months).sort();
+  makeChart('trendChart','line',
+    {labels:mk.map(x=>x.split('-').reverse().join('/')),datasets:[
+      {label:'Unidades',data:mk.map(k=>months[k].q),borderColor:'#d5001c',backgroundColor:'rgba(213,0,28,.12)',tension:.28,yAxisID:'y',fill:true},
+      {label:'Faturamento',data:mk.map(k=>months[k].v),borderColor:'#e2e2e2',backgroundColor:'transparent',tension:.28,yAxisID:'y1'}
+    ]},
+    {...baseOptions(),scales:{x:{ticks:{color:'#888',font:{size:9}},grid:{color:'#222'}},
+      y:{position:'left',ticks:{color:'#888'},grid:{color:'#222'}},
+      y1:{position:'right',ticks:{color:'#888',callback:v=>fmtBRL(v)},grid:{drawOnChartArea:false}}}}
+  );
+
+  renderCityChart(rows);
+
+  const byState={};
+  rows.forEach(r=>byState[r.estado]=(byState[r.estado]||0)+r.faturamento);
+  const ss=Object.entries(byState).sort((a,b)=>b[1]-a[1]).slice(0,12);
+  makeChart('stateChart','bar',
+    {labels:ss.map(x=>x[0]),datasets:[{label:'Faturamento',data:ss.map(x=>x[1]),backgroundColor:'#d5001c',borderRadius:3}]},
+    {...baseOptions(),plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmtBRL(c.raw)}}}}
+  );
+
+  const byStatus={};
+  all.forEach(r=>byStatus[r.status]=(byStatus[r.status]||0)+1);
+  const st=Object.entries(byStatus).sort((a,b)=>b[1]-a[1]);
+  makeChart('statusChart','doughnut',
+    {labels:st.map(x=>x[0]),datasets:[{data:st.map(x=>x[1]),backgroundColor:COLORS,borderColor:'#151518',borderWidth:2}]},
+    {responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#bbb',font:{size:9}}}}}
+  );
+
+  const desc=[];
+  const e=document.getElementById('estado').value, c=document.getElementById('cidade').value, m=document.getElementById('modelo').value;
+  if(e) desc.push(e); if(c) desc.push(c); if(m) desc.push(m);
+  document.getElementById('selectionText').textContent=desc.length?desc.join(' · '):'Visão consolidada';
+}
+
+function renderCityChart(rows) {
+  const byCity = {};
+  rows.forEach(r => {
+    byCity[r.cidade] = (byCity[r.cidade] || 0) + r.faturamento;
+  });
+  const cities = Object.entries(byCity)
+    .sort((a,b) => b[1] - a[1])
+    .slice(0, 12);
+
+  makeChart('cityChart','bar',
+    {
+      labels: cities.map(x => x[0]),
+      datasets: [{
+        label: 'Faturamento',
+        data: cities.map(x => x[1]),
+        backgroundColor: '#d5001c',
+        borderRadius: 3
+      }]
+    },
+    {
+      ...baseOptions(),
+      indexAxis: 'y',
+      plugins: {
+        legend: {display:false},
+        tooltip: {callbacks: {label:c => fmtBRL(c.raw)}}
+      },
+      scales: {
+        x: {
+          ticks: {color:'#888', callback:v => fmtBRL(v)},
+          grid: {color:'#222'}
+        },
+        y: {
+          ticks: {color:'#bbb', font:{size:9}},
+          grid: {display:false}
+        }
+      }
+    }
+  );
+}
+
+['estado','cidade','modelo','inicio','fim'].forEach(id=>document.getElementById(id).addEventListener('change',render));
+document.getElementById('reset').addEventListener('click',()=>{
+  ['estado','cidade','modelo','inicio','fim'].forEach(id=>document.getElementById(id).value=''); render();
+});
+render();
+</script>
+</body>
+</html>
